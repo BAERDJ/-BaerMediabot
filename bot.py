@@ -8,7 +8,7 @@ import requests
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# === ФЕЙКОВИЙ СЕРВЕР ДЛЯ ОБХОДУ БЛОКУВАННЯ RENDER ===
+# === ФЕЙКОВИЙ СЕРВЕР ===
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -22,7 +22,7 @@ def run_dummy_server():
     server.serve_forever()
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
-# ====================================================
+# ========================
 
 TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
@@ -37,7 +37,13 @@ def handle_url(message):
     url = message.text
     msg = bot.send_message(message.chat.id, "Шукаю інформацію... ⏳")
     
-    ydl_opts = {'quiet': True, 'noplaylist': True, 'cookiefile': 'cookies.txt'}
+    # ДОДАНО ОБХІД: маскуємо запит під мобільний додаток Android
+    ydl_opts = {
+        'quiet': True, 
+        'noplaylist': True, 
+        'cookiefile': 'cookies.txt',
+        'extractor_args': {'youtube': ['player_client=android']}
+    }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -51,8 +57,8 @@ def handle_url(message):
                 InlineKeyboardButton("🎵 Тільки MP3", callback_data="dl_audio")
             )
             bot.edit_message_text(f"🎬 **{title}**\n\nОбери формат:", chat_id=message.chat.id, message_id=msg.message_id, reply_markup=markup, parse_mode="Markdown")
-    except Exception:
-        bot.edit_message_text("❌ Помилка. Перевір посилання або онови cookies.", chat_id=message.chat.id, message_id=msg.message_id)
+    except Exception as e:
+        bot.edit_message_text(f"❌ Помилка. YouTube блокує запит. Спробуй інше відео.", chat_id=message.chat.id, message_id=msg.message_id)
 
 @bot.callback_query_handler(func=lambda call: call.data in ['dl_video', 'dl_audio'])
 def handle_download(call):
@@ -65,11 +71,13 @@ def handle_download(call):
     unique_id = int(time.time())
     bot.edit_message_text("Завантажую... ⏳", chat_id=chat_id, message_id=call.message.message_id)
     
+    # ДОДАНО ОБХІД для завантаження
     ydl_opts = {
         'outtmpl': f'{chat_id}_{unique_id}_%(title)s.%(ext)s', 
         'noplaylist': True, 
         'quiet': True,
-        'cookiefile': 'cookies.txt'
+        'cookiefile': 'cookies.txt',
+        'extractor_args': {'youtube': ['player_client=android']}
     }
 
     if choice == 'dl_video':
@@ -102,6 +110,6 @@ def handle_download(call):
                 
                 if os.path.exists(file_to_send): os.remove(file_to_send)
     except Exception:
-        bot.edit_message_text("❌ Помилка завантаження.", chat_id=chat_id, message_id=call.message.message_id)
+        bot.edit_message_text("❌ Помилка завантаження. YouTube відхилив запит.", chat_id=chat_id, message_id=call.message.message_id)
 
 bot.polling(none_stop=True)
