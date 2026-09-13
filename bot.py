@@ -5,7 +5,6 @@ import requests
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# === Фейковий сервер для підтримки Render увімкненим ===
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -19,7 +18,6 @@ def run_dummy_server():
     server.serve_forever()
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
-# =======================================================
 
 TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
@@ -49,35 +47,43 @@ def handle_download(call):
     if not url:
         return bot.answer_callback_query(call.id, "Посилання застаріло. Надішли його ще раз.")
 
-    bot.edit_message_text("Обробляю посилання, зачекай секунду... ⏳", chat_id, call.message.message_id)
+    bot.edit_message_text("Шукаю посилання на файл... ⏳", chat_id, call.message.message_id)
     
     headers = {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
     }
     
+    # Використовуємо актуальні параметри згідно з документацією Cobalt API
     payload = {
         "url": url,
-        "vQuality": "max"
+        "videoQuality": "max"
     }
     
     if call.data == 'audio':
-        payload["isAudioOnly"] = True
+        payload["downloadMode"] = "audio"
+        payload["audioFormat"] = "mp3"
 
     try:
-        response = requests.post("https://api.cobalt.tools/api/json", headers=headers, json=payload)
+        response = requests.post("https://api.cobalt.tools/api/json", headers=headers, json=payload, timeout=15)
         data = response.json()
         
-        if "url" in data:
-            download_url = data["url"]
+        # Перевіряємо різні варіанти відповіді API (url, tunnel або stream)
+        download_url = data.get("url") or data.get("picker") and data["picker"][0].get("url")
+        
+        if not download_url and "tunnel" in data:
+            download_url = data["tunnel"]
+
+        if download_url:
             markup = InlineKeyboardMarkup()
             markup.add(InlineKeyboardButton("⬇️ Завантажити файл", url=download_url))
-            bot.edit_message_text("✅ **Готово!** Тисни на кнопку нижче, щоб завантажити файл у максимальній якості без водяних знаків:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+            bot.edit_message_text("✅ **Готово!** Тисни на кнопку нижче, щоб завантажити файл у найвищій якості без водяних знаків:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
         else:
-            bot.edit_message_text("❌ Не вдалося обробити це посилання. Спробуй інше.", chat_id, call.message.message_id)
+            err_text = data.get('text', 'Невідома помилка')
+            bot.edit_message_text(f"❌ Помилка сервісу: {err_text}. Спробуй інше посилання.", chat_id, call.message.message_id)
             
-    except Exception:
-        bot.edit_message_text("❌ Помилка зв'язку з сервером генерації.", chat_id, call.message.message_id)
+    except Exception as e:
+        bot.edit_message_text("❌ Помилка з'єднання з обробником. Спробуй ще раз за хвилину.", chat_id, call.message.message_id)
 
 bot.polling(none_stop=True)
