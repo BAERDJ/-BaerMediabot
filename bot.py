@@ -5,7 +5,7 @@ import requests
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-# === Фейковий сервер для стабільної роботи на Render ===
+# === Фейковий сервер для підтримки Render увімкненим ===
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -27,7 +27,7 @@ user_requests = {}
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "Привіт! Надішли посилання (YouTube, TikTok, Instagram тощо).")
+    bot.send_message(message.chat.id, "Привіт! Надішли мені посилання на відео (YouTube, TikTok, Instagram).")
 
 @bot.message_handler(func=lambda message: message.text.startswith('http'))
 def handle_url(message):
@@ -39,7 +39,7 @@ def handle_url(message):
         InlineKeyboardButton("🎬 Макс. якість відео", callback_data="video"),
         InlineKeyboardButton("🎵 Тільки MP3", callback_data="audio")
     )
-    bot.reply_to(message, "Обери формат:", reply_markup=markup)
+    bot.reply_to(message, "Обери формат завантаження:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data in ['video', 'audio'])
 def handle_download(call):
@@ -47,14 +47,14 @@ def handle_download(call):
     url = user_requests.get(chat_id)
     
     if not url:
-        return bot.answer_callback_query(call.id, "Надішли посилання ще раз.")
+        return bot.answer_callback_query(call.id, "Посилання застаріло. Надішли його ще раз.")
 
-    bot.edit_message_text("Оброблюю запит через анти-блок сервер... ⏳", chat_id, call.message.message_id)
+    bot.edit_message_text("Обробляю посилання, зачекай секунду... ⏳", chat_id, call.message.message_id)
     
     headers = {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)'
     }
     
     payload = {
@@ -70,13 +70,14 @@ def handle_download(call):
         data = response.json()
         
         if "url" in data:
+            download_url = data["url"]
             markup = InlineKeyboardMarkup()
-            markup.add(InlineKeyboardButton("⬇️ Завантажити файл", url=data["url"]))
-            bot.edit_message_text(f"✅ **Файл успішно згенеровано!**\n\nТисни на кнопку нижче, щоб миттєво зберегти відео/аудіо у найвищій якості без водяних знаків:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+            markup.add(InlineKeyboardButton("⬇️ Завантажити файл", url=download_url))
+            bot.edit_message_text("✅ **Готово!** Тисни на кнопку нижче, щоб завантажити файл у максимальній якості без водяних знаків:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
         else:
-            bot.edit_message_text("❌ Сервіс не зміг обробити це посилання.", chat_id, call.message.message_id)
+            bot.edit_message_text("❌ Не вдалося обробити це посилання. Спробуй інше.", chat_id, call.message.message_id)
             
     except Exception:
-        bot.edit_message_text("❌ Помилка з'єднання з API.", chat_id, call.message.message_id)
+        bot.edit_message_text("❌ Помилка зв'язку з сервером генерації.", chat_id, call.message.message_id)
 
 bot.polling(none_stop=True)
