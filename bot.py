@@ -5,6 +5,24 @@ import os
 import glob
 import time
 import requests
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# === ФЕЙКОВИЙ СЕРВЕР ДЛЯ ОБХОДУ БЛОКУВАННЯ RENDER ===
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), DummyHandler)
+    server.serve_forever()
+
+threading.Thread(target=run_dummy_server, daemon=True).start()
+# ====================================================
 
 TOKEN = os.getenv('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
@@ -19,7 +37,6 @@ def handle_url(message):
     url = message.text
     msg = bot.send_message(message.chat.id, "Шукаю інформацію... ⏳")
     
-    # Додано cookiefile для обходу блокувань YouTube та Instagram
     ydl_opts = {'quiet': True, 'noplaylist': True, 'cookiefile': 'cookies.txt'}
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -48,7 +65,6 @@ def handle_download(call):
     unique_id = int(time.time())
     bot.edit_message_text("Завантажую... ⏳", chat_id=chat_id, message_id=call.message.message_id)
     
-    # Додано cookiefile для завантаження
     ydl_opts = {
         'outtmpl': f'{chat_id}_{unique_id}_%(title)s.%(ext)s', 
         'noplaylist': True, 
@@ -70,7 +86,6 @@ def handle_download(call):
             
             if files:
                 file_to_send = files[0]
-                # Перевірка на ліміт Telegram (50 МБ)
                 if os.path.getsize(file_to_send) / (1024 * 1024) > 48:
                     bot.edit_message_text("Вага > 50 МБ. Створюю хмарне посилання... ☁️", chat_id=chat_id, message_id=call.message.message_id)
                     try:
@@ -85,7 +100,6 @@ def handle_download(call):
                         bot.send_video(chat_id, f) if choice == 'dl_video' else bot.send_audio(chat_id, f)
                     bot.delete_message(chat_id=chat_id, message_id=call.message.message_id)
                 
-                # Видалення файлу з сервера для економії місця
                 if os.path.exists(file_to_send): os.remove(file_to_send)
     except Exception:
         bot.edit_message_text("❌ Помилка завантаження.", chat_id=chat_id, message_id=call.message.message_id)
