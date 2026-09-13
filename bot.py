@@ -45,7 +45,7 @@ def handle_download(call):
     url = user_requests.get(chat_id)
     
     if not url:
-        return bot.answer_callback_query(call.id, "Посилання застаріло. Надішли його ще раз.")
+        return bot.answer_callback_query(call.id, "Посилання застаріле. Надішли його ще раз.")
 
     bot.edit_message_text("Шукаю посилання на файл... ⏳", chat_id, call.message.message_id)
     
@@ -55,7 +55,6 @@ def handle_download(call):
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
     }
     
-    # Використовуємо актуальні параметри згідно з документацією Cobalt API
     payload = {
         "url": url,
         "videoQuality": "max"
@@ -66,10 +65,10 @@ def handle_download(call):
         payload["audioFormat"] = "mp3"
 
     try:
-        response = requests.post("https://api.cobalt.tools/api/json", headers=headers, json=payload, timeout=15)
+        # Використовуємо нове стабільне дзеркало Cobalt замість закритого сайту
+        response = requests.post("https://co.wuk.sh/api/json", headers=headers, json=payload, timeout=15)
         data = response.json()
         
-        # Перевіряємо різні варіанти відповіді API (url, tunnel або stream)
         download_url = data.get("url") or data.get("picker") and data["picker"][0].get("url")
         
         if not download_url and "tunnel" in data:
@@ -81,9 +80,9 @@ def handle_download(call):
             bot.edit_message_text("✅ **Готово!** Тисни на кнопку нижче, щоб завантажити файл у найвищій якості без водяних знаків:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
         else:
             err_text = data.get('text', 'Невідома помилка')
-            bot.edit_message_text(f"❌ Помилка сервісу: {err_text}. Спробуй інше посилання.", chat_id, call.message.message_id)
+            bot.edit_message_text(f"❌ Помилка: {err_text}", chat_id, call.message.message_id)
             
     except Exception as e:
-        bot.edit_message_text("❌ Помилка з'єднання з обробником. Спробуй ще раз за хвилину.", chat_id, call.message.message_id)
+        bot.edit_message_text("❌ Помилка з'єднання з новим сервером. Спробуй ще раз.", chat_id, call.message.message_id)
 
 bot.polling(none_stop=True)
