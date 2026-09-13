@@ -19,7 +19,8 @@ def handle_url(message):
     url = message.text
     msg = bot.send_message(message.chat.id, "Шукаю інформацію... ⏳")
     
-    ydl_opts = {'quiet': True, 'noplaylist': True}
+    # Додано cookiefile для обходу блокувань YouTube та Instagram
+    ydl_opts = {'quiet': True, 'noplaylist': True, 'cookiefile': 'cookies.txt'}
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -34,7 +35,7 @@ def handle_url(message):
             )
             bot.edit_message_text(f"🎬 **{title}**\n\nОбери формат:", chat_id=message.chat.id, message_id=msg.message_id, reply_markup=markup, parse_mode="Markdown")
     except Exception:
-        bot.edit_message_text("❌ Помилка. Перевір посилання.", chat_id=message.chat.id, message_id=msg.message_id)
+        bot.edit_message_text("❌ Помилка. Перевір посилання або онови cookies.", chat_id=message.chat.id, message_id=msg.message_id)
 
 @bot.callback_query_handler(func=lambda call: call.data in ['dl_video', 'dl_audio'])
 def handle_download(call):
@@ -47,7 +48,13 @@ def handle_download(call):
     unique_id = int(time.time())
     bot.edit_message_text("Завантажую... ⏳", chat_id=chat_id, message_id=call.message.message_id)
     
-    ydl_opts = {'outtmpl': f'{chat_id}_{unique_id}_%(title)s.%(ext)s', 'noplaylist': True, 'quiet': True}
+    # Додано cookiefile для завантаження
+    ydl_opts = {
+        'outtmpl': f'{chat_id}_{unique_id}_%(title)s.%(ext)s', 
+        'noplaylist': True, 
+        'quiet': True,
+        'cookiefile': 'cookies.txt'
+    }
 
     if choice == 'dl_video':
         ydl_opts['format'] = 'bestvideo+bestaudio/best'
@@ -63,6 +70,7 @@ def handle_download(call):
             
             if files:
                 file_to_send = files[0]
+                # Перевірка на ліміт Telegram (50 МБ)
                 if os.path.getsize(file_to_send) / (1024 * 1024) > 48:
                     bot.edit_message_text("Вага > 50 МБ. Створюю хмарне посилання... ☁️", chat_id=chat_id, message_id=call.message.message_id)
                     try:
@@ -77,6 +85,7 @@ def handle_download(call):
                         bot.send_video(chat_id, f) if choice == 'dl_video' else bot.send_audio(chat_id, f)
                     bot.delete_message(chat_id=chat_id, message_id=call.message.message_id)
                 
+                # Видалення файлу з сервера для економії місця
                 if os.path.exists(file_to_send): os.remove(file_to_send)
     except Exception:
         bot.edit_message_text("❌ Помилка завантаження.", chat_id=chat_id, message_id=call.message.message_id)
