@@ -25,7 +25,7 @@ user_requests = {}
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, "Привіт! Надішли мені посилання на відео (YouTube, TikTok, Instagram).")
+    bot.send_message(message.chat.id, "Привіт! Надішли мені посилання на відео.")
 
 @bot.message_handler(func=lambda message: message.text.startswith('http'))
 def handle_url(message):
@@ -45,44 +45,36 @@ def handle_download(call):
     url = user_requests.get(chat_id)
     
     if not url:
-        return bot.answer_callback_query(call.id, "Посилання застаріле. Надішли його ще раз.")
+        return bot.answer_callback_query(call.id, "Посилання застаріло. Надішли його ще раз.")
 
     bot.edit_message_text("Шукаю посилання на файл... ⏳", chat_id, call.message.message_id)
     
-    headers = {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-    }
-    
-    payload = {
-        "url": url,
-        "videoQuality": "max"
-    }
-    
-    if call.data == 'audio':
-        payload["downloadMode"] = "audio"
-        payload["audioFormat"] = "mp3"
-
     try:
-        # Використовуємо нове стабільне дзеркало Cobalt замість закритого сайту
-        response = requests.post("https://co.wuk.sh/api/json", headers=headers, json=payload, timeout=15)
-        data = response.json()
+        # Використовуємо стабільний відкритий API-ендпоінт для генерації
+        api_url = f"https://apis.davidcyriltech.my.id/download?url={url}"
+        response = requests.get(api_url, timeout=20)
+        res_data = response.json()
         
-        download_url = data.get("url") or data.get("picker") and data["picker"][0].get("url")
-        
-        if not download_url and "tunnel" in data:
-            download_url = data["tunnel"]
+        download_url = None
+        if "result" in res_data:
+            download_url = res_data["result"].get("dl_url") or res_data["result"].get("download_url")
+        elif "download" in res_data:
+            download_url = res_data["download"]
+
+        if not download_url:
+            # Запасний варіант через альтернативний шлюз
+            alt_response = requests.get(f"https://tikwm.com/api/?url={url}", timeout=15).json()
+            if "data" in alt_response and "play" in alt_response["data"]:
+                download_url = alt_response["data"]["play"]
 
         if download_url:
             markup = InlineKeyboardMarkup()
             markup.add(InlineKeyboardButton("⬇️ Завантажити файл", url=download_url))
-            bot.edit_message_text("✅ **Готово!** Тисни на кнопку нижче, щоб завантажити файл у найвищій якості без водяних знаків:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
+            bot.edit_message_text("✅ **Готово!** Тисни на кнопку нижче, щоб завантажити файл:", chat_id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
         else:
-            err_text = data.get('text', 'Невідома помилка')
-            bot.edit_message_text(f"❌ Помилка: {err_text}", chat_id, call.message.message_id)
+            bot.edit_message_text("❌ Не вдалося отримати пряме посилання. Спробуй інше відео.", chat_id, call.message.message_id)
             
-    except Exception as e:
-        bot.edit_message_text("❌ Помилка з'єднання з новим сервером. Спробуй ще раз.", chat_id, call.message.message_id)
+    except Exception:
+        bot.edit_message_text("❌ Помилка з'єднання з архівом. Спробуй ще раз.", chat_id, call.message.message_id)
 
 bot.polling(none_stop=True)
